@@ -8,6 +8,7 @@ import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import path from "node:path";
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "..");
@@ -39,6 +40,7 @@ Usage:
   pulse run [options]      Start the gateway (default)
   pulse stop               Stop a running gateway
   pulse status             Check if the gateway is running
+  pulse update             Update to the latest version
   pulse version            Print version
   pulse help               Show this help
 
@@ -124,6 +126,43 @@ switch (cmd) {
   case "stop":
     stop();
     break;
+
+  case "update": {
+    const pkgName = "@bryxen/pulse";
+    console.log("pulse: checking for updates…");
+
+    // 1. Fetch latest version from npm registry
+    let latest: string;
+    try {
+      const res = await fetch(`https://registry.npmjs.org/${pkgName}/latest`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json() as { version: string };
+      latest = data.version;
+    } catch (e) {
+      console.error("pulse: failed to check latest version");
+      process.exit(1);
+    }
+
+    // 2. Compare with current version
+    if (latest === pkg.version) {
+      console.log(`pulse: already up to date (v${pkg.version})`);
+      break;
+    }
+
+    // 3. Update — prefer bun, fall back to npm
+    console.log(`pulse: updating v${pkg.version} → v${latest}…`);
+    const pm = Bun.which("bun") ? "bun" : "npm";
+    const args = pm === "bun"
+      ? ["install", "-g", `${pkgName}@${latest}`]
+      : ["install", "-g", `${pkgName}@${latest}`];
+    const result = spawnSync(pm, args, { stdio: "inherit" });
+    if (result.status !== 0) {
+      console.error("pulse: update failed");
+      process.exit(1);
+    }
+    console.log(`\npulse: updated to v${latest}`);
+    break;
+  }
 
   case "run":
   case "start": {

@@ -52,6 +52,12 @@ pulse run
 
 Opens on `http://127.0.0.1:3000` with no login — data lives at `~/.pulse/pulse.db`. Use `pulse run --help` for flags (`--port`, `--host`, `--db-path`, `--auth` to enable the login page).
 
+Update to the latest version anytime:
+
+```bash
+pulse update
+```
+
 ### From source (development)
 
 ```bash
