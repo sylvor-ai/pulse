@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import "./index.css";
 import { Sidebar } from "./components/Sidebar";
 import { Topbar } from "./components/Topbar";
@@ -65,23 +65,42 @@ export function App() {
       .catch(() => {});
   }, []);
 
-  // Fetch sessions when user is logged in
+  // Track whether we've done the initial fetch
+  const initialFetchDone = useRef(false);
+
+  // Poll sessions every 3 seconds
   useEffect(() => {
     if (!token) return;
-    fetch("/api/sessions", { headers: authHeaders(token) })
-      .then((r) => {
-        if (r.status === 401) {
-          handleLogout();
-          return null;
-        }
-        return r.json();
-      })
-      .then((data: Session[] | null) => {
-        if (!data) return;
-        setSessions(data);
-        if (data.length > 0) setActiveSessionId(data[0]!.id);
-      })
-      .catch(console.error);
+
+    const fetchSessions = () => {
+      fetch("/api/sessions", { headers: authHeaders(token) })
+        .then((r) => {
+          if (r.status === 401) {
+            handleLogout();
+            return null;
+          }
+          return r.json();
+        })
+        .then((data: Session[] | null) => {
+          if (!data) return;
+          setSessions(data);
+          // Only auto-select the first session on initial load
+          if (!initialFetchDone.current && data.length > 0) {
+            setActiveSessionId(data[0]!.id);
+          }
+          initialFetchDone.current = true;
+        })
+        .catch(console.error);
+    };
+
+    fetchSessions(); // initial fetch
+    const interval = setInterval(fetchSessions, 3000);
+    return () => clearInterval(interval);
+  }, [token]);
+
+  // Reset initialFetchDone when token changes (logout)
+  useEffect(() => {
+    if (!token) initialFetchDone.current = false;
   }, [token]);
 
   const fetchMessages = useCallback(
@@ -95,9 +114,13 @@ export function App() {
     [token]
   );
 
+  // Poll messages every 2 seconds when viewing a session
   useEffect(() => {
-    if (activeSessionId) fetchMessages(activeSessionId);
-  }, [activeSessionId, fetchMessages]);
+    if (!activeSessionId || !token) return;
+    fetchMessages(activeSessionId);
+    const interval = setInterval(() => fetchMessages(activeSessionId), 2000);
+    return () => clearInterval(interval);
+  }, [activeSessionId, fetchMessages, token]);
 
   const handleSelectSession = (id: string) => {
     setActiveSessionId(id);
